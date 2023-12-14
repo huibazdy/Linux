@@ -61,7 +61,9 @@ struct mm_struct {
 
 ### 内核线程的内存描述
 
-内核线程没有进程地址空间，也没有相关内存描述符，所以它们对应的 task_struct 中的 mm 域为空
+内核线程没有进程地址空间，也没有相关内存描述符，所以它们对应的 task_struct 中的 mm 域为空（NULL）。
+
+> 内核线程直接使用前一个进程的内存描述符。
 
 
 
@@ -73,7 +75,8 @@ struct mm_struct {
 
 ```c
 struct task_struct {
-    struct mm_struct *mm;  // 记录该进程使用的内存描述符
+    struct mm_struct *mm;            // 记录该进程使用的内存描述符
+    struct mm_struct *active_mm;     // 当进程被调度（地址空间被装载到内存），这个域会被更新
     ...
 };
 ```
@@ -85,3 +88,26 @@ struct task_struct {
 
 
 在Linux中，是否共享地址空间几乎是进程和线程的唯一区别。可以将线程理解为：共享特定资源（地址空间）的进程。
+
+
+
+## VMA
+
+一个进程使用的**虚拟内存区域（Virtual Memory Areas，VMA）**由结构体 **`vm_area_struct`** 描述，它定义在文件*`<include/linux/mm_types.h>`*中：
+
+```c
+struct vm_area_struct {
+    struct mm_struct       *vm_mm;          // 与当前 VMA 相关的 mm_struct 结构体
+    unsigned long          vm_start;        // 该 VMA 虚拟地址区间的首地址，在区间内
+    unsigned long          vm_end;          // 该 VMA 虚拟地址区间的尾地址，在区间外
+    struct vm_area_struct  *vm_next;        // 多个 VMA 组成链表，该域指明下一个 VMA 节点
+    pgprot_t               vm_page_prot;    // 该 VMA 的访问控制权限
+    unsigned long          vm_flags;        // 标识位
+    ...
+};
+```
+
+> 其中 `vm_end - vm_start` 就是内存区间的长度。
+>
+> 【注意】同一个地址区间内，内存区间不能重叠。
+
