@@ -1,6 +1,10 @@
-# Linux_mm
+# Linux 内存管理
 
-> 即使一个进程的可寻址虚拟内存***地址空间***是 4 GB，并不代表该进程有权访问所有的虚拟地址。我们更关心的是虚拟内存的***地址区间***（可以理解为能被进程所访问的地址空间，是 4 GB 的一个子集）。
+## 内存空间
+
+> 一个进程的可寻址虚拟内存***地址空间***是 4 GB，但并不代表该进程有权访问所有的虚拟地址。
+>
+> 我们更关心的是能被进程所访问的地址空间，即虚拟内存的***地址区间***。这个地址区间可以理解为是可寻址地址空间（4 GB） 的一个子集。本文之后提到的“地址空间”多是这个含义。
 >
 > 这些可以被访问的虚拟内存地址区间也被称为***内存区域（Virtual Memory Area，VMA）***。进程可以通过内核动态调整内存区域的大小。
 
@@ -19,11 +23,23 @@
 
 
 
+## 进程描述符
+
+Linux 中的进程或线程都是通过 **`task_struct`**结构体来描述和管理的，定义在`<include/linux/sched.h>`：
+
+```c
+struct task_struct {
+    struct mm_struct *mm;            // 记录该进程使用的内存描述符
+    struct mm_struct *active_mm;     // 当进程被调度（地址空间被装载到内存），这个域会被更新
+    ...
+};
+```
+
+是否共享地址空间几乎是进程和线程的唯一区别。可以将线程理解为：共享地址空间的进程。
+
 ## 内存描述符
 
-Linux 内核通过一个名为内存描述符（**`struct mm_struct`**）的结构体来描述一个进程的地址空间，定义在 *`<include/linux/mm_types.h>`* 文件中。
-
-
+Linux 内核通过一个名为内存描述符（**`struct mm_struct`**）的结构体来描述一个进程的地址空间，定义在 *`<include/linux/mm_types.h>`* 中。通常来说，进程的内存描述符（mm_struct）是唯一的，即进程只有唯一的地址空间。
 
 ```c
 struct mm_struct {
@@ -67,47 +83,69 @@ struct mm_struct {
 
 
 
-## 进程描述符
-
-通过 **`struct task_struct`**结构体来描述，定义在 *`<include/linux/sched.h>`*中
 
 
+## 虚拟内存区域
 
-```c
-struct task_struct {
-    struct mm_struct *mm;            // 记录该进程使用的内存描述符
-    struct mm_struct *active_mm;     // 当进程被调度（地址空间被装载到内存），这个域会被更新
-    ...
-};
-```
-
-
-
-通常，进程有唯一的内存描述符（mm_struct），即唯一的进程地址空间。
-
-
-
-在Linux中，是否共享地址空间几乎是进程和线程的唯一区别。可以将线程理解为：共享特定资源（地址空间）的进程。
-
-
-
-## VMA
-
-一个进程使用的**虚拟内存区域（Virtual Memory Areas，VMA）**由结构体 **`vm_area_struct`** 描述，它定义在文件*`<include/linux/mm_types.h>`*中：
+一个进程使用的虚拟内存区域（**Virtual Memory Areas，VMA**）由结构体 **`vm_area_struct`** 描述，它定义在文件*`<include/linux/mm_types.h>`*中：
 
 ```c
 struct vm_area_struct {
     struct mm_struct       *vm_mm;          // 与当前 VMA 相关的 mm_struct 结构体
     unsigned long          vm_start;        // 该 VMA 虚拟地址区间的首地址，在区间内
     unsigned long          vm_end;          // 该 VMA 虚拟地址区间的尾地址，在区间外
-    struct vm_area_struct  *vm_next;        // 多个 VMA 组成链表，该域指明下一个 VMA 节点
+    struct vm_area_struct  *vm_next;        // 多个 VMA 组成双向链表，该域指明下一个 VMA 节点
+    struct vm_area_struct  *vm_prev;        // 多个 VMA 组成双向链表，该域指明上一个 VMA 节点
+    struct rb_root         vm_rb;           // 每个 vm_area_struct 通过这个
     pgprot_t               vm_page_prot;    // 该 VMA 的访问控制权限
     unsigned long          vm_flags;        // 标识位
+    ...
+    const struct vm_operations_struct *vm_ops  // 用于处理 VMA 的操作函数指针的集合
     ...
 };
 ```
 
-> 其中 `vm_end - vm_start` 就是内存区间的长度。
->
-> 【注意】同一个地址区间内，内存区间不能重叠。
+> ***怎样理解 VMA 结构体、内存区域和地址空间？***
+
+每个 vm_area_struct 管理进程的一个虚拟内存区域，所属这个进程的多个 vm_area_struct 所管理的总的虚拟内存区域就是该进程的地址空间。
+
+
+
+> ***一个 VMA 的长度是多少？***
+
+其中 `vm_end - vm_start` 就是内存区间的长度，单位是字节。
+
+
+
+> ***多个 VMA 使用哪种数据结构来组织？***
+
+从结构体的定义可以看出 Linux 内核提供了两种组织 VMA 的方式：双向链表以及红黑树。链表用于需要遍历全部 VMA 节点时，红黑树用于在地址空间中定位特定内存区域时。
+
+### VMA 访问控制
+
+vm_flags 标识了一个VMA所管理的虚拟内存区域所包含页面的行为和信息，以下是几个最常见的 VMA 标识：
+
+|    标识     | 对VMA的及其页面的影响 |
+| :---------: | :-------------------: |
+|  `VM_READ`  |      页面可读取       |
+| `VM_WRITE`  |       页面可写        |
+|  `VM_EXEC`  |      页面可执行       |
+| `VM_SHARED` |      页面可共享       |
+|     ...     |                       |
+
+这些标识位通过组合构成 **VMA** 的访问控制权限。例如进程的可执行代码中的数据段或代码段，映射到相应的区域 时，该  **VMA** 仅标志为 **VM_READ** 。
+
+
+
+### VMA 操作集合
+
+对虚拟内存区域 VMA 的操作的一系列集合由结构体 `vm_opearations_struct` 描述，其中每一个函数指针就是一个对应的操作，定义在 `<include/linux/mm.h>` 中。
+
+```c
+struct vm_operations_struct {
+    void (*open)(struct vm_area_struct * area);      // 指定内存区域被加入到地址空间时调用
+    void (*close)(struct vm_area_struct * area);     // 指定内存区域被从地址空间删除时调用
+    ...
+};
+```
 
