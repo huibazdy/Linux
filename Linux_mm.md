@@ -149,3 +149,47 @@ struct vm_operations_struct {
 };
 ```
 
+
+
+## 实例分析
+
+我们可以通过编写一个用户空间的程序实例来分析下内存管理的结果。
+
+```c
+#include <stdio.h>
+#include <unistd.h>
+
+int main()
+{
+	while(1) {
+		printf("Hello!\n");
+		sleep(2);  // print once every two second
+	} 
+	return 0;
+}
+```
+
+该进程pid为2086，再执行命令:`cat /proc/2086/maps`输出该进程地址空间中的全部内存区域，结果如下：
+
+![](C:\Users\zdy\Desktop\maps.png)
+
+数据格式：开始-结束      访问权限      偏移      主设备号 : 次设备号      文件索引节点号      文件
+
+*  C 库中 libc.so 的代码段/数据段和bss段
+* 可执行程序的代码段和数据段
+* 动态链接库的代码段和数据段
+* 进程的栈（倒数第四行）
+
+
+
+> 代码段：可读可执行
+>
+> 数据段和bss段：可读可写不可执行
+>
+> 堆栈：可读可写可执行
+
+
+
+也可以使用命令：`pmap 2086`，获取更方阅读的输出形式，结果如下：
+
+![](https://raw.githubusercontent.com/huibazdy/TyporaPicture/main/pmap2.png)
