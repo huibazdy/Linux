@@ -195,3 +195,78 @@ int main()
 也可以使用命令：`pmap 2086`，获取更方阅读的输出形式，结果如下：
 
 ![](https://raw.githubusercontent.com/huibazdy/TyporaPicture/main/pmap2.png)
+
+
+
+## 常用 VMA 函数
+
+
+
+### find_vma( )
+
+> **给定一个内存地址，第一个 vm_end 大于 addr 的 VMA**
+
+函数声明在*`<include/linux/mm.h>`*中：
+
+```c
+extern struct vm_area_strcut * find_vma(struct mm_struct * mm, unsigned long addr);
+```
+
+返回结果缓存在内存描述符（mm_struct）的 **mmap_cache** 域中。
+
+函数实现在*`<mm/mmap.c>`*中：
+
+```c
+/* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
+struct vm_area_struct *find_vma(struct mm_struct *mm, unsigned long addr)
+{
+	struct rb_node *rb_node;
+	struct vm_area_struct *vma;
+
+	mmap_assert_locked(mm);
+	/* Check the cache first. */
+	vma = vmacache_find(mm, addr);
+	if (likely(vma))
+		return vma;
+
+	rb_node = mm->mm_rb.rb_node;
+
+	while (rb_node) {
+		struct vm_area_struct *tmp;
+
+		tmp = rb_entry(rb_node, struct vm_area_struct, vm_rb);
+
+		if (tmp->vm_end > addr) {
+			vma = tmp;
+			if (tmp->vm_start <= addr)
+				break;
+			rb_node = rb_node->rb_left;
+		} else
+			rb_node = rb_node->rb_right;
+	}
+
+	if (vma)
+		vmacache_update(addr, vma);
+	return vma;
+}
+```
+
+
+
+### find_vma_pre( )
+
+> **给定一个地址，返回第一个小于 addr  的 VMA**
+
+函数声明在*`<include/linux/mm.h>`*中：
+
+函数定义在*`<mm/mmap.c>`*中：
+
+
+
+
+
+### find_vma_insetion( )
+
+> **找到第一个和给定地址所在区间相交的 VMA**
+
+因为是内联函数，所以定义在*`<include/linux/mm.h>`*中
