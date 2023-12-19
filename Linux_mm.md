@@ -102,10 +102,12 @@ struct vm_area_struct {
     struct vm_area_struct  *vm_next;        // 多个 VMA 组成双向链表，该域指明下一个 VMA 节点
     struct vm_area_struct  *vm_prev;        // 多个 VMA 组成双向链表，该域指明上一个 VMA 节点
     struct rb_root         vm_rb;           // 每个 vm_area_struct 通过这个
-    pgprot_t               vm_page_prot;    // 该 VMA 的访问控制权限
-    unsigned long          vm_flags;        // 标识位
+    pgprot_t               vm_page_prot;    // 该 VMA 区域的页级别的权限控制
+    unsigned long          vm_flags;        // 单个 VMA 区域的权限控制
     ...
     const struct vm_operations_struct *vm_ops  // 用于处理 VMA 的操作函数指针的集合
+    ...
+    struct file * vm_file;		            /* File we map to (can be NULL). */ 
     ...
 };
 ```
@@ -134,13 +136,27 @@ vm_flags 标识了一个VMA所管理的虚拟内存区域所包含页面的行�
 
 |    标识     | 对VMA的及其页面的影响 |
 | :---------: | :-------------------: |
-|  `VM_READ`  |      页面可读取       |
+|  `VM_READ`  |       页面可读        |
 | `VM_WRITE`  |       页面可写        |
 |  `VM_EXEC`  |      页面可执行       |
 | `VM_SHARED` |      页面可共享       |
 |     ...     |                       |
 
-这些标识位通过组合构成 **VMA** 的访问控制权限。例如进程的可执行代码中的数据段或代码段，映射到相应的区域 时，该  **VMA** 仅标志为 **VM_READ** 。
+> **【注意】**可共享的含义是：该 VMA 映射的物理内存可以在多个进程间共享，以便完成进程间通信。设置该权限即为 **mmap** 的**共享映射**，不设置该权限就是**私有映射**。
+
+
+
+一个进程虚拟空间划分区域的常见权限分配如下：
+
+|         VMA          |              权限              |
+| :------------------: | :----------------------------: |
+|          栈          |      `VM_READ`|`VM_WRITE`      |
+|          堆          | `VM_READ`|`VM_WRITE`|`VM_EXEC` |
+|        代码段        |      `VM_READ`|`VM_EXEC`       |
+|        数据段        |      `VM_READ`|`VM_WRITE`      |
+| 文件映射与匿名映射区 |           `VM_EXEC`            |
+
+
 
 
 
@@ -365,6 +381,20 @@ static __always_inline unsigned long task_size_max(void)
 ```c
 #define PAGE_SIZE		(_AC(1,UL) << PAGE_SHIFT)
 ```
+
+
+
+## 关于映射
+
+### 匿名映射
+
+虚拟内存区域映射到物理内存上称之为匿名映射。此时**vm_area_struct** 的 **vm_file** 域值为 **NULL** 。
+
+### 文件映射
+
+虚拟内存区域映射到文件中，称为文件映射。
+
+当调用 mmap 进行文件映射时，会关联 **vm_area_struct** 的 **vm_file** 域，它关联的就是被映射的文件。
 
 
 
