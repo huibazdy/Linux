@@ -90,7 +90,6 @@ struct mm_struct {
 ## 虚拟内存区域
 
 一个进程使用的虚拟内存区域（**Virtual Memory Areas，VMA**）由结构体 **`vm_area_struct`** 描述，它定义在文件*`<include/linux/mm_types.h>`*中：
-
 ```c
 struct vm_area_struct {
     struct mm_struct       *vm_mm;          // 与当前 VMA 相关的 mm_struct 结构体
@@ -106,6 +105,8 @@ struct vm_area_struct {
     ...
 };
 ```
+
+
 
 > ***怎样理解 VMA 结构体、内存区域和地址空间？***
 
@@ -173,7 +174,7 @@ int main()
 
 该进程pid为2086，再执行命令:`cat /proc/2086/maps`输出该进程地址空间中的全部内存区域，结果如下：
 
-![](C:\Users\zdy\Desktop\maps.png)
+![](https://raw.githubusercontent.com/huibazdy/TyporaPicture/main/1.png)
 
 数据格式：开始-结束      访问权限      偏移      主设备号 : 次设备号      文件索引节点号      文件
 
@@ -270,3 +271,33 @@ struct vm_area_struct *find_vma(struct mm_struct *mm, unsigned long addr)
 > **找到第一个和给定地址所在区间相交的 VMA**
 
 因为是内联函数，所以定义在*`<include/linux/mm.h>`*中
+
+
+
+
+
+## 虚拟内存与物理内存的关系
+
+一图说明：
+
+![](https://raw.githubusercontent.com/huibazdy/TyporaPicture/main/111.png)
+
+
+
+## 创建新区间
+
+### do_mmap( )
+
+内核创建一个新的内存区域或者扩展已经存在的内存区域，都会调用这个函数，将新的内存区域加到进程的虚拟地址空间中去。该函数定义在`<include/linux/mm.h>`中：
+
+```c
+extern unsigned long do_mmap(struct file *file, unsigned long addr,
+	unsigned long len, unsigned long prot, unsigned long flags,
+	unsigned long pgoff, unsigned long *populate, struct list_head *uf);
+```
+
+
+
+## 参考资料
+
+1. [一步一图理解 Linux 虚拟内存](https://www.cnblogs.com/binlovetech/p/16824522.html)
