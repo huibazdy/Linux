@@ -50,6 +50,10 @@ struct mm_struct {
     atomic_t                 mm_users;   // 共有几个进程（线程）在共享该地址空间
     atomic_t                 mm_count;   // 引用计数器
     struct list_head         mmlist;     // 每个 mm_struct 通过 mmlist 域链接到一个双向链表中
+    unsigned long            task_size;	 // 用户空间的上限地址
+    unsigned long            start_code, end_code, start_data, end_data; // 代码段与数据段
+    unsigned long            start_brk, brk, start_stack;  // 堆栈地址，栈顶位置放在寄存器栈顶指针中
+    ...
 };
 ```
 
@@ -313,10 +317,54 @@ extern unsigned long do_mmap(struct file *file, unsigned long addr,
 
 实际上 32 位机器完整虚拟内存分布图如下（箭头代表内存增长方向）：
 
-![](https://raw.githubusercontent.com/huibazdy/TyporaPicture/main/%E5%86%85%E5%AD%98%E5%88%86%E5%B8%8303.png)
+![](https://raw.githubusercontent.com/huibazdy/TyporaPicture/main/VMA04.png)
 
 * 堆上面的一段待分配区域用于扩展堆。当堆申请新的内存空间时，只需增加 brk 指针来增加对应空间大小，回收时减小 brk 指针即可
-*  
+
+
+
+### 关于 task_size
+
+> **注意：64 位机器只使用低 48 位来表示虚拟地址空间，一共 256 TB **
+>
+> 用户空间：低地址的 128 TB（0x0000 0000 0000 0000 - 0x0000 7FFF FFFF F000）
+>
+> 内核空间：高地质的 128 TB（0xFFFF 8000 0000 0000 - 0xFFFF FFFF FFFF FFFF）
+>
+> 中间的“空洞”称之为：canonical address
+
+以 64 位 x86 机器为例，在文件*`<arch/x86/include/asm/page_64_types.h>`*中定义：
+
+```c
+#define TASK_SIZE_MAX		task_size_max()
+```
+
+
+
+其中*`task_size_max()`*函数定义在文件`<arch/x86/include/asm/page_64.h>`中：
+
+```c
+static __always_inline unsigned long task_size_max(void)
+{
+	unsigned long ret;
+
+	alternative_io("movq %[small],%0","movq %[large],%0",
+			X86_FEATURE_LA57,
+			"=r" (ret),
+			[small] "i" ((1ul << 47)-PAGE_SIZE),
+			[large] "i" ((1ul << 56)-PAGE_SIZE));
+
+	return ret;
+}
+```
+
+
+
+其中`PAGE_SIZE`定义在`<arch/x86/include/asm/page_types.h>`中：
+
+```c
+#define PAGE_SIZE		(_AC(1,UL) << PAGE_SHIFT)
+```
 
 
 
