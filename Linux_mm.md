@@ -371,3 +371,4 @@ static __always_inline unsigned long task_size_max(void)
 ## 参考资料
 
 1. [一步一图理解 Linux 虚拟内存](https://www.cnblogs.com/binlovetech/p/16824522.html)
+2. [内核任务空间管理](https://ty-chen.github.io/linux-kernel-mmstruct/)
