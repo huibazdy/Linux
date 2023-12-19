@@ -298,6 +298,28 @@ extern unsigned long do_mmap(struct file *file, unsigned long addr,
 
 
 
+## 内存分布图解
+
+在 32 位机器上，对一个进程来说，理论可寻址虚拟地址为 4 GB：
+
+![](https://raw.githubusercontent.com/huibazdy/TyporaPicture/main/%E5%86%85%E5%AD%98%E5%88%86%E5%B8%831.png)
+
+需要注意的是其中绿色区域（高地址向低地址增长）：
+
+1. 程序运行所依赖的动态链接库中的代码段、数据段和 bss 段；
+2. 调用 mmap 映射出来的虚拟内存
+
+
+
+实际上 32 位机器完整虚拟内存分布图如下（箭头代表内存增长方向）：
+
+![](https://raw.githubusercontent.com/huibazdy/TyporaPicture/main/%E5%86%85%E5%AD%98%E5%88%86%E5%B8%8303.png)
+
+* 堆上面的一段待分配区域用于扩展堆。当堆申请新的内存空间时，只需增加 brk 指针来增加对应空间大小，回收时减小 brk 指针即可
+*  
+
+
+
 ## 参考资料
 
 1. [一步一图理解 Linux 虚拟内存](https://www.cnblogs.com/binlovetech/p/16824522.html)
