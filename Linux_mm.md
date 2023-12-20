@@ -54,6 +54,7 @@ struct mm_struct {
     unsigned long            start_code, end_code, start_data, end_data; // 代码段与数据段
     unsigned long            start_brk, brk, start_stack;  // 堆栈地址，栈顶位置放在寄存器栈顶指针中
     ...
+    pgd_t * pgd;   // 指向进程的页全局目录（PGD）
 };
 ```
 
@@ -395,6 +396,47 @@ static __always_inline unsigned long task_size_max(void)
 虚拟内存区域映射到文件中，称为文件映射。
 
 当调用 mmap 进行文件映射时，会关联 **vm_area_struct** 的 **vm_file** 域，它关联的就是被映射的文件。
+
+
+
+## ELF 文件与虚拟内存的关系
+
+ELF 格式的二进制文件是源代码编译之后的产物。其中包含程序运行需要的要素（元数据），包括：程序代码的机器码、全局变量、静态变量等。
+
+ELF 也根据不同的信息类型，划分出了不同的区域，这些区域的布局类似于进程虚拟内存区域的分段划分方式，只是 ELF 中称为 **Section** ，虚拟内存中我们称为 **Segment** 。
+
+磁盘中的 ELF 文件会在进程运行之前加载到内存中，并映射到进程的虚拟内存空间。通常是多个 Section 映射到一个 Segment 中。
+
+比如磁盘文件中的 .text，.rodata 等一些只读的 Section，会被映射到内存的一个只读可执行的 Segment 里（代码段）。而 .data，.bss 等一些可读写的 Section，则会被映射到内存的一个具有读写权限的 Segment 里（数据段，BSS 段）。
+
+具体解析并执行 ELF 文件的函数是：`load_elf_binary()`，此处不详细展开。
+
+
+
+## 页表
+
+Linux 采用三级页表结构，目的是为了节约地址转换需要占用的空间。页表实现依赖于具体的体系结构，定义在文件`<asm/page.h>`中。
+
+### 一级页表
+
+也称顶级页表，是**页全局目录**（**PGD**），包含了一个 `pgd_t` 类型的数组。多级页表中`pgd_t`等同于无符号长整型。PGD 中的表项，指向二级页目录的表项（PMD）。
+
+每个进程都有自己的页表（线程共享页表），内存描述符（mm_struct）中的 pdg 域指向页全局目录。
+
+> 【**注意**】
+> **操作和检索页表时，必须使用 page_table_lock 锁，以防止竞争条件。该锁在相应进程的内存描述符中。**
+
+### 二级页表
+
+二级页表是中间**页目录（PMD）**，是一个`pmd_t`类型的数组，其中的表项指向 PTE 中的表项。
+
+### 三级页表
+
+最后一级页表简称**页表（PTE）**，包含`pte_t`类型页表项，这些表项指向物理页面。
+
+三级页表结构的全局视图如下：
+
+![](https://raw.githubusercontent.com/huibazdy/TyporaPicture/main/Linux_Page_Table01.png)
 
 
 
